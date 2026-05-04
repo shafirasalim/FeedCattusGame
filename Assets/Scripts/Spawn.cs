@@ -59,7 +59,6 @@ public class Spawn : MonoBehaviour
         // Paksa posisi spawn
         enemy.transform.position = spawnPoint.position;
 
-        // Reset rotasi
         enemy.transform.rotation = Quaternion.identity;
 
         Debug.Log("Enemy berhasil spawn di: " + spawnPoint.position);
