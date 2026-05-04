@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 2
+  tags:
+  - Ground
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - 
+  - Water
+  - UI
+  - Ground
+  - Player
+  - Enemy
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Default
+    uniqueID: 0
+    locked: 0
+  - name: Latar1
+    uniqueID: 1285750907
+    locked: 0
+  - name: Latar2
+    uniqueID: 182815299
+    locked: 0
+  - name: Latar3
+    uniqueID: 2723473789
+    locked: 0
+  - name: Player
+    uniqueID: 2584513185
+    locked: 0
+  - name: Enemy
+    uniqueID: 2602423519
+    locked: 0
