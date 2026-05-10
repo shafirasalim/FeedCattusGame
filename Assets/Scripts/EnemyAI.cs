@@ -1,4 +1,6 @@
+﻿using System.Collections;
 using UnityEngine;
+
 namespace TopDown_Enemy
 {
     public class EnemyAI : MonoBehaviour
@@ -8,110 +10,161 @@ namespace TopDown_Enemy
         [Header("References")]
         public Transform player;
 
-        [Header("Speed Settings")]
+        [Header("Movement")]
         public float patrolSpeed = 2f;
         public float chaseSpeed = 4f;
 
         [Header("Detection")]
-        public float chaseRange = 6f;
-        public float patrolChangeTime = 3f;
+        public float chaseRange = 5f;
+        public float verticalRange = 1f;
 
-        [Header("Rotation")]
-        public float rotationSpeed = 250f;
+        [Header("Layers")]
+        public LayerMask groundLayer;
+        public LayerMask obstacleLayer;
+
+        [Header("Raycast")]
+        public float wallCheckDist = 0.2f;
+        public float groundCheckDist = 1f;
+
+        [Header("Direction")]
+        public bool faceRight = false;
+        public float turnDelay = 0.2f;
+
+        [Header("Debug")]
+        public bool showDebugLogs = true;
 
         private Rigidbody2D rb;
-        private Vector2 moveDirection;
-        private float patrolTimer;
-        private EnemyState currentState;
+        private SpriteRenderer sr;
+        private EnemyState state;
+        private float dir = 1f;
+        private bool canTurn = true;
+        private bool isBlocked = false;
 
         void Start()
         {
             rb = GetComponent<Rigidbody2D>();
-            currentState = EnemyState.Patrol;
-            ChooseRandomDirection();
+            sr = GetComponent<SpriteRenderer>();
+            state = EnemyState.Patrol;
+
+            if (showDebugLogs)
+                Debug.Log($"[ENEMY] {name} started | State: PATROL");
         }
 
         void Update()
         {
             float distance = Vector2.Distance(transform.position, player.position);
+            CheckObstacles();
 
-            switch (currentState)
+            if (state == EnemyState.Patrol)
             {
-                case EnemyState.Patrol:
-                    PatrolState(distance);
-                    break;
-                case EnemyState.Chase:
-                    ChaseState(distance);
-                    break;
+                if (CanSeePlayer(distance))
+                {
+                    if (showDebugLogs)
+                        Debug.Log("[STATE] Patrol → Chase (Player detected!)");
+                    state = EnemyState.Chase;
+                }
             }
-            RotateToMovement();
+            else if (state == EnemyState.Chase)
+            {
+                if (isBlocked)
+                {
+                    if (showDebugLogs)
+                        Debug.Log("[STATE] Chase → Patrol (Blocked by obstacle)");
+                    state = EnemyState.Patrol;
+                    return;
+                }
+
+                if (!CanSeePlayer(distance))
+                {
+                    if (showDebugLogs)
+                        Debug.Log("[STATE] Chase → Patrol (Player lost)");
+                    state = EnemyState.Patrol;
+                    return;
+                }
+
+                dir = (player.position.x > transform.position.x) ? 1f : -1f;
+                if ((dir > 0 && !faceRight) || (dir < 0 && faceRight)) Flip();
+            }
+
+            if (state == EnemyState.Patrol && isBlocked && canTurn)
+            {
+                TurnAround();
+            }
         }
 
         void FixedUpdate()
         {
-            float currentSpeed = currentState == EnemyState.Patrol ? patrolSpeed : chaseSpeed;
+            float speed = (state == EnemyState.Chase) ? chaseSpeed : patrolSpeed;
 
-            Vector2 newVelocity = new Vector2(moveDirection.x * currentSpeed, rb.velocity.y);
-            rb.velocity = newVelocity;
-
-            transform.position = new Vector3(transform.position.x, transform.position.y, 0f);
-        }
-
-        void PatrolState(float distance)
-        {
-            patrolTimer += Time.deltaTime;
-
-            if (patrolTimer >= patrolChangeTime)
+            if (state == EnemyState.Chase && isBlocked)
             {
-                ChooseRandomDirection();
-                patrolTimer = 0f;
+                rb.velocity = new Vector2(0f, rb.velocity.y);
+                return;
             }
 
-            if (distance <= chaseRange)
-            {
-                currentState = EnemyState.Chase;
-            }
+            rb.velocity = new Vector2(dir * speed, rb.velocity.y);
         }
 
-        void ChaseState(float distance)
+        bool CanSeePlayer(float distance)
         {
-            moveDirection = (player.position - transform.position).normalized;
+            if (player == null || distance > chaseRange) return false;
 
-            if (distance > chaseRange)
-            {
-                currentState = EnemyState.Patrol;
-            }
+            float verticalDistance = Mathf.Abs(player.position.y - transform.position.y);
+            if (verticalDistance > verticalRange) return false;
+
+            RaycastHit2D enemyGround = Physics2D.Raycast(transform.position, Vector2.down, 5f, groundLayer);
+            RaycastHit2D playerGround = Physics2D.Raycast(player.position, Vector2.down, 5f, groundLayer);
+
+            if (enemyGround.collider == null || playerGround.collider == null) return false;
+            if (Mathf.Abs(enemyGround.point.y - playerGround.point.y) > 0.3f) return false;
+
+            Vector2 eye = (Vector2)transform.position + new Vector2(0f, 0.4f);
+            Vector2 target = (Vector2)player.position;
+
+            RaycastHit2D obstacleHit = Physics2D.Linecast(eye, target, obstacleLayer);
+
+            if (showDebugLogs)
+                Debug.DrawLine(eye, target, obstacleHit.collider ? Color.red : Color.green, 0.1f);
+
+            return obstacleHit.collider == null;
         }
 
-        void ChooseRandomDirection()
+        void CheckObstacles()
         {
-            float randomX = Random.Range(-1f, 1f);
-            float randomY = Random.Range(-1f, 1f);
-            moveDirection = new Vector2(randomX, randomY).normalized;
-        }
+            Vector2 forward = new Vector2(dir, 0);
+            Vector2 wallPos = (Vector2)transform.position + forward * 0.6f;
+            Vector2 edgePos = (Vector2)transform.position + forward * 0.6f + Vector2.down * 0.8f;
 
-        void RotateToMovement()
-        {
-            if (moveDirection != Vector2.zero)
+            bool hitWall = Physics2D.Raycast(wallPos, forward, wallCheckDist, groundLayer | obstacleLayer);
+            bool hasGround = Physics2D.Raycast(edgePos, Vector2.down, groundCheckDist, groundLayer);
+
+            isBlocked = hitWall || !hasGround;
+
+            if (showDebugLogs)
             {
-                float targetAngle = Mathf.Atan2(moveDirection.y, moveDirection.x) * Mathf.Rad2Deg;
-                targetAngle += 90f;
-
-                Quaternion targetRotation = Quaternion.Euler(0f, 0f, targetAngle);
-                transform.rotation = Quaternion.RotateTowards(
-                    transform.rotation,
-                    targetRotation,
-                    rotationSpeed * Time.deltaTime
-                );
+                Debug.DrawRay(wallPos, forward * wallCheckDist, hitWall ? Color.red : Color.yellow, 0.5f);
+                Debug.DrawRay(edgePos, Vector2.down * groundCheckDist, hasGround ? Color.green : Color.red, 0.5f);
             }
         }
 
-        void OnCollisionEnter2D(Collision2D collision)
+        void TurnAround()
         {
-            if (currentState == EnemyState.Patrol)
-            {
-                ChooseRandomDirection();
-            }
+            dir *= -1f;
+            Flip();
+            canTurn = false;
+            StartCoroutine(TurnCooldown());
+        }
+
+        IEnumerator TurnCooldown()
+        {
+            yield return new WaitForSeconds(turnDelay);
+            canTurn = true;
+        }
+
+        void Flip()
+        {
+            faceRight = !faceRight;
+            sr.flipX = !sr.flipX;
         }
     }
 }
